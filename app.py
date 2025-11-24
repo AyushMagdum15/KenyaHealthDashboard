@@ -1,12 +1,3 @@
-# -----------------------------------------
-# Premium Dash App – Kenya Health Dashboard
-# -----------------------------------------
-# ✔ Dual Theme (light/dark) – no JS required
-# ✔ KPI Cards + Bar + Scatter + Heatmap + Radar
-# ✔ County dropdown fixed
-# ✔ Clean, premium layout
-# -----------------------------------------
-
 import os
 import pandas as pd
 import numpy as np
@@ -16,24 +7,29 @@ from dash.dependencies import Input, Output
 import plotly.express as px
 import plotly.graph_objects as go
 
-# -----------------------------------------
-# 1) LOAD DATA
-# -----------------------------------------
-DATA_PATH = "subcounty_metrics.csv"
+# -------------------------------------------------
+# 1) Load CSV (Render-friendly)
+# -------------------------------------------------
+
+# Look for CSV in the same directory as app.py
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_PATH = os.path.join(BASE_DIR, "subcounty_metrics.csv")
+
+if not os.path.exists(DATA_PATH):
+    raise FileNotFoundError(f"CSV file not found at: {DATA_PATH}")
 
 df = pd.read_csv(DATA_PATH)
 
-# Ensure correct subcounty column
+# Fix column name
 if "matched_area_clean" not in df.columns:
     for c in df.columns:
         if "area" in c.lower() or "sub" in c.lower():
             df = df.rename(columns={c: "matched_area_clean"})
             break
 
-# -----------------------------------------
-# 2) COUNTY MAPPING – FIXED & CORRECTED
-# (NOW after df exists)
-# -----------------------------------------
+# -------------------------------------------------
+# 2) County Mapping
+# -------------------------------------------------
 county_map = {
     "ATHI RIVER": "Machakos",
     "AWENDO": "Migori",
@@ -67,20 +63,21 @@ county_map = {
 
 df["county"] = df["matched_area_clean"].map(county_map).fillna("Unknown")
 
-# Clean numeric NaNs
+# Numeric cleanup
 num_cols = df.select_dtypes(include=[np.number]).columns
 df[num_cols] = df[num_cols].fillna(0)
 
 # Service percentage columns
 service_pct_cols = [c for c in df.columns if c.endswith("_pct")]
 
-# -----------------------------------------
-# 3) DASH APP INITIALIZE
-# -----------------------------------------
+# -------------------------------------------------
+# 3) Initialize Dash
+# -------------------------------------------------
 app = dash.Dash(__name__)
-app.title = "Kenya Health — Premium Dashboard"
+server = app.server   # REQUIRED FOR RENDER
 
-# Dropdown options
+app.title = "Kenya Health Dashboard"
+
 county_options = [{"label": c, "value": c} for c in sorted(df["county"].unique())]
 
 metric_options = [
@@ -91,174 +88,111 @@ metric_options = [
     {"label": "Operational %", "value": "pct_operational"},
 ]
 
-# -----------------------------------------
-# 4) LAYOUT
-# -----------------------------------------
+# -------------------------------------------------
+# 4) Layout
+# -------------------------------------------------
 app.layout = html.Div([
+    html.H2("Kenya Health Dashboard", style={"padding": "10px"}),
 
-    # Theme toggle
-    dcc.Store(id="theme-store", data="light"),
-    html.Link(id="theme-css", rel="stylesheet", href="/assets/light.css"),
-
-    html.Div([
-        html.H2("Kenya Health Dashboard", style={"margin": "0"}),
-        html.Button("🌞 / 🌙", id="theme-button", n_clicks=0,
-                    style={"float": "right", "padding": "6px 10px", "borderRadius": "8px"})
-    ], style={"padding": "18px 24px", "borderBottom": "1px solid #ddd"}),
-
-    # Filters row
     html.Div([
         html.Div([
             html.Label("County"),
-            dcc.Dropdown(id="county-dropdown", options=county_options, multi=True,
-                         placeholder="Select County(s)")
+            dcc.Dropdown(id="county", options=county_options, multi=True)
         ], style={"width": "30%", "display": "inline-block"}),
 
         html.Div([
             html.Label("Metric"),
-            dcc.Dropdown(id="metric-dropdown", options=metric_options,
-                         value="facilities_per_10k")
+            dcc.Dropdown(id="metric", options=metric_options, value="facilities_per_10k")
         ], style={"width": "30%", "display": "inline-block", "marginLeft": "2%"}),
 
         html.Div([
             html.Label("Top N"),
-            dcc.Slider(id="topn-slider", min=5, max=50, step=5, value=20,
+            dcc.Slider(id="topN", min=5, max=50, step=5, value=20,
                        marks={i: str(i) for i in [5, 10, 20, 30, 40, 50]})
-        ], style={"width": "35%", "display": "inline-block", "marginLeft": "2%"})
-    ], style={"padding": "20px"}),
+        ], style={"width": "35%", "display": "inline-block", "marginLeft": "2%"}),
+    ], style={"padding": "10px"}),
 
-    # KPI CARDS
+    # Charts grid
     html.Div([
-        html.Div([
-            html.Div("Total Sub-counties", className="kpi-label"),
-            html.Div(id="kpi-total", className="kpi-value")
-        ], className="card"),
-
-        html.Div([
-            html.Div("Avg Facilities per 10k", className="kpi-label"),
-            html.Div(id="kpi-fac", className="kpi-value")
-        ], className="card"),
-
-        html.Div([
-            html.Div("Avg Beds per 10k", className="kpi-label"),
-            html.Div(id="kpi-beds", className="kpi-value")
-        ], className="card"),
-    ], style={"display": "flex", "gap": "1%", "padding": "20px"}),
-
-    # Charts section
-    html.Div([
-        html.Div(dcc.Graph(id="bar-chart"), className="card", style={"width": "49%"}),
-        html.Div(dcc.Graph(id="scatter-plot"), className="card", style={"width": "49%"}),
-    ], style={"display": "flex", "gap": "2%", "padding": "20px"}),
+        html.Div(dcc.Graph(id="bar"), style={"width": "49%", "display": "inline-block"}),
+        html.Div(dcc.Graph(id="scatter"), style={"width": "49%", "display": "inline-block"}),
+    ]),
 
     html.Div([
-        html.Div(dcc.Graph(id="heatmap"), className="card", style={"width": "69%"}),
-        html.Div(dcc.Graph(id="radar-chart"), className="card", style={"width": "29%"}),
-    ], style={"display": "flex", "gap": "2%", "padding": "20px"}),
+        html.Div(dcc.Graph(id="heat"), style={"width": "69%", "display": "inline-block"}),
+        html.Div(dcc.Graph(id="radar"), style={"width": "29%", "display": "inline-block"}),
+    ]),
 
-    # Data table
+    # Table
     html.Div([
-        html.H4("Sub-County Metrics"),
         dash_table.DataTable(
-            id="data-table",
+            id="table",
             columns=[{"name": c, "id": c} for c in df.columns],
-            data=df.to_dict("records"),
-            page_size=12,
+            page_size=10,
             sort_action="native",
             filter_action="native",
-            style_table={"overflowX": "auto"},
+            data=df.to_dict("records"),
         )
-    ], className="card", style={"padding": "20px", "margin": "20px"}),
+    ], style={"padding": "20px"}),
 ])
 
-# -----------------------------------------
-# 5) THEME TOGGLE CALLBACK
-# -----------------------------------------
-@app.callback(
-    Output("theme-css", "href"),
-    Output("theme-store", "data"),
-    Input("theme-button", "n_clicks")
-)
-def toggle_theme(n):
-    if n % 2 == 1:
-        return "/assets/dark.css", "dark"
-    return "/assets/light.css", "light"
-
-# -----------------------------------------
-# 6) MAIN DASHBOARD CALLBACK
-# -----------------------------------------
+# -------------------------------------------------
+# 5) Callbacks
+# -------------------------------------------------
 @app.callback(
     [
-        Output("bar-chart", "figure"),
-        Output("scatter-plot", "figure"),
-        Output("heatmap", "figure"),
-        Output("radar-chart", "figure"),
-        Output("data-table", "data"),
-        Output("kpi-total", "children"),
-        Output("kpi-fac", "children"),
-        Output("kpi-beds", "children"),
+        Output("bar", "figure"),
+        Output("scatter", "figure"),
+        Output("heat", "figure"),
+        Output("radar", "figure"),
+        Output("table", "data"),
     ],
     [
-        Input("county-dropdown", "value"),
-        Input("metric-dropdown", "value"),
-        Input("topn-slider", "value"),
+        Input("county", "value"),
+        Input("metric", "value"),
+        Input("topN", "value"),
     ]
 )
-def update_dashboard(selected_counties, metric, topn):
-
+def update(counties, metric, topN):
     dff = df.copy()
 
-    if selected_counties:
-        dff = dff[dff["county"].isin(selected_counties)]
+    if counties:
+        dff = dff[dff["county"].isin(counties)]
 
-    # KPIs
-    kpi_total = dff["matched_area_clean"].nunique()
-    kpi_fac = f"{dff['facilities_per_10k'].mean():.2f}"
-    kpi_beds = f"{dff['beds_per_10k'].mean():.2f}"
+    # Bar chart
+    bar_df = dff.sort_values(metric, ascending=False).head(topN)
+    bar_fig = px.bar(bar_df, x=metric, y="matched_area_clean",
+                     orientation="h",
+                     title=f"Top {topN}: {metric.replace('_',' ').title()}")
 
-    # BAR
-    bar_df = dff.sort_values(metric, ascending=False).head(topn)
-    fig_bar = px.bar(bar_df, x=metric, y="matched_area_clean", orientation="h",
-                     title=f"Top {topn} by {metric.replace('_',' ').title()}")
-
-    # SCATTER
-    fig_scatter = px.scatter(dff, x="total_facilities", y="beds",
+    # Scatter
+    scatter_fig = px.scatter(dff, x="total_facilities", y="beds",
                              size="population" if "population" in dff else None,
-                             hover_name="matched_area_clean")
+                             hover_name="matched_area_clean",
+                             title="Beds vs Facilities")
 
-    # HEATMAP
+    # Heatmap
     hm = dff.sort_values("population", ascending=False).head(40)
-    fig_heat = go.Figure(data=go.Heatmap(
+    heat_fig = go.Figure(go.Heatmap(
         z=hm[service_pct_cols].values,
         x=[c[:-4].upper() for c in service_pct_cols],
         y=hm["matched_area_clean"]
     ))
 
-    # RADAR
-    avg_vals = dff[service_pct_cols].mean().tolist()
-    fig_radar = go.Figure(go.Scatterpolar(
-        r=avg_vals + avg_vals[:1],
+    # Radar
+    vals = dff[service_pct_cols].mean().tolist()
+    radar_fig = go.Figure(go.Scatterpolar(
+        r=vals + vals[:1],
         theta=[c[:-4].upper() for c in service_pct_cols] +
               [service_pct_cols[0][:-4].upper()],
         fill="toself"
     ))
 
-    return (
-        fig_bar,
-        fig_scatter,
-        fig_heat,
-        fig_radar,
-        dff.to_dict("records"),
-        kpi_total,
-        kpi_fac,
-        kpi_beds,
-    )
+    return bar_fig, scatter_fig, heat_fig, radar_fig, dff.to_dict("records")
 
-# -----------------------------------------
-# 7) RUN SERVER
-# -----------------------------------------
+
+# -------------------------------------------------
+# 6) Run
+# -------------------------------------------------
 if __name__ == "__main__":
-    app.run(debug=True, port=8050)
-
-
-
+    app.run(host="0.0.0.0", port=8050)
