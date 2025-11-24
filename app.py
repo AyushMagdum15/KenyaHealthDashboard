@@ -19,7 +19,7 @@ import plotly.graph_objects as go
 # -----------------------------------------
 # 1) LOAD DATA
 # -----------------------------------------
-DATA_PATH = r"C:\Users\ayush.magdum\Desktop\Self\KenyaHealthDashboard\data\subcounty_metrics.csv"
+DATA_PATH = r"\subcounty_metrics.csv"
 
 df = pd.read_csv(DATA_PATH)
 
@@ -259,3 +259,4 @@ def update_dashboard(selected_counties, metric, topn):
 # -----------------------------------------
 if __name__ == "__main__":
     app.run(debug=True, port=8050)
+
